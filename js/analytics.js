@@ -75,7 +75,7 @@ const Analytics = (() => {
      * @param {String} actionId - ID of the bad habit action
      * @returns {Number} Number of days since last occurrence
      */
-    const calculateDaysSinceLastOccurrence = (actionId) => {
+    const calculateDaysSinceLastOccurrence = async (actionId) => {
         const activities = await Storage.getActivities();
         
         // Filter activities for this action that have date
@@ -107,7 +107,7 @@ const Analytics = (() => {
      * Get all good habit actions
      * @returns {Array} Array of good habit actions
      */
-    const getGoodHabitActions = () => {
+    const getGoodHabitActions = async () => {
         const actions = await Storage.getActions();
         return actions.filter(action => action.type === 'good');
     };
@@ -116,7 +116,7 @@ const Analytics = (() => {
      * Get all bad habit actions
      * @returns {Array} Array of bad habit actions
      */
-    const getBadHabitActions = () => {
+    const getBadHabitActions = async () => {
         const actions = await Storage.getActions();
         return actions.filter(action => action.type === 'bad');
     };
@@ -125,7 +125,7 @@ const Analytics = (() => {
      * Calculate exercise streak (for backward compatibility)
      * @returns {Number} Number of consecutive days with exercise
      */
-    const calculateExerciseStreak = () => {
+    const calculateExerciseStreak = async () => {
         return calculateActionStreak('exercise');
     };
     
@@ -133,50 +133,15 @@ const Analytics = (() => {
      * Calculate days since last unhealthy food (for backward compatibility)
      * @returns {Number} Number of days since last unhealthy food entry
      */
-    const calculateDaysSinceUnhealthyFood = () => {
+    const calculateDaysSinceUnhealthyFood = async () => {
         return calculateDaysSinceLastOccurrence('diet-unhealthy');
-    };
-    
-    /**
-     * Calculate average work hours per day
-     * @returns {Number} Average work hours per day
-     */
-    const calculateAverageWorkHours = () => {
-        const activities = Storage.getActivities();
-        const workActivities = activities.filter(activity => 
-            activity.actionId === 'work' || activity.type === 'work');
-        
-        if (workActivities.length === 0) return 0;
-        
-        let totalHours = 0;
-        
-        workActivities.forEach(activity => {
-            const startTime = activity.startTime.split(':');
-            const endTime = activity.endTime.split(':');
-            
-            const startDate = new Date(0);
-            startDate.setHours(parseInt(startTime[0]), parseInt(startTime[1]), 0);
-            
-            const endDate = new Date(0);
-            endDate.setHours(parseInt(endTime[0]), parseInt(endTime[1]), 0);
-            
-            // Handle end time being next day
-            if (endDate < startDate) {
-                endDate.setDate(endDate.getDate() + 1);
-            }
-            
-            const diffHours = (endDate - startDate) / (1000 * 60 * 60);
-            totalHours += diffHours;
-        });
-        
-        return (totalHours / workActivities.length).toFixed(1);
     };
     
         /**
      * Count activities by action for the last 30 days
      * @returns {Object} Object with actionId as keys and counts as values
      */
-    const getActivityCountsLast30Days = () => {
+    const getActivityCountsLast30Days = async () => {
         const activities = await Storage.getActivities();
         const now = new Date();
         const thirtyDaysAgo = new Date();
@@ -207,7 +172,6 @@ const Analytics = (() => {
         getBadHabitActions,
         calculateExerciseStreak,
         calculateDaysSinceUnhealthyFood,
-        calculateAverageWorkHours,
         getActivityCountsLast30Days
     };
 })();

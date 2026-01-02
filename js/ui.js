@@ -124,8 +124,8 @@ const UI = (() => {
     const updateDashboard = async () => {
         statsContainer.innerHTML = 'Loading stats...';
         
-        const goodActions = Analytics.getGoodHabitActions();
-        const badActions = Analytics.getBadHabitActions();
+        const goodActions = await Analytics.getGoodHabitActions();
+        const badActions = await Analytics.getBadHabitActions();
         
         statsContainer.innerHTML = '';
         
