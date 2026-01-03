@@ -376,8 +376,9 @@ const UI = (() => {
         const name = document.getElementById('action-name').value;
         const type = [...document.getElementsByName('action-type')].find(r => r.checked).value;
         const fields = [...document.getElementsByName('action-fields')].filter(c => c.checked).map(c => c.value);
+        const notes = document.getElementById('action-notes').value;
         
-        const action = { name, type, fields };
+        const action = { name, type, fields, notes }; // Add notes to the object
 
         if (currentEditingActionId) {
             await Storage.updateAction(currentEditingActionId, action);
@@ -477,6 +478,8 @@ const UI = (() => {
         
         // Populate form fields
         document.getElementById('action-name').value = action.name;
+
+        document.getElementById('action-notes').value = action.notes || '';
         
         // Set radio button for type
         const typeRadios = document.getElementsByName('action-type');
