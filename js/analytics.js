@@ -10,8 +10,8 @@ const Analytics = (() => {
      * @param {String} actionId - ID of the action to calculate streak for
      * @returns {Number} Number of consecutive days with the action
      */
-    const calculateActionStreak = async (actionId) => {
-        const activities = await Storage.getActivities();
+    const calculateActionStreak = (actionId) => {
+        const activities = Storage.getActivities();
         if (activities.length === 0) return 0;
         
         // Get all unique dates with this action using date
@@ -75,8 +75,8 @@ const Analytics = (() => {
      * @param {String} actionId - ID of the bad habit action
      * @returns {Number} Number of days since last occurrence
      */
-    const calculateDaysSinceLastOccurrence = async (actionId) => {
-        const activities = await Storage.getActivities();
+    const calculateDaysSinceLastOccurrence = (actionId) => {
+        const activities = Storage.getActivities();
         
         // Filter activities for this action that have date
         const relevantActivities = activities
@@ -107,8 +107,8 @@ const Analytics = (() => {
      * Get all good habit actions
      * @returns {Array} Array of good habit actions
      */
-    const getGoodHabitActions = async () => {
-        const actions = await Storage.getActions();
+    const getGoodHabitActions = () => {
+        const actions = Storage.getActions();
         return actions.filter(action => action.type === 'good');
     };
     
@@ -116,8 +116,8 @@ const Analytics = (() => {
      * Get all bad habit actions
      * @returns {Array} Array of bad habit actions
      */
-    const getBadHabitActions = async () => {
-        const actions = await Storage.getActions();
+    const getBadHabitActions = () => {
+        const actions = Storage.getActions();
         return actions.filter(action => action.type === 'bad');
     };
     
@@ -125,7 +125,7 @@ const Analytics = (() => {
      * Calculate exercise streak (for backward compatibility)
      * @returns {Number} Number of consecutive days with exercise
      */
-    const calculateExerciseStreak = async () => {
+    const calculateExerciseStreak = () => {
         return calculateActionStreak('exercise');
     };
     
@@ -133,16 +133,51 @@ const Analytics = (() => {
      * Calculate days since last unhealthy food (for backward compatibility)
      * @returns {Number} Number of days since last unhealthy food entry
      */
-    const calculateDaysSinceUnhealthyFood = async () => {
+    const calculateDaysSinceUnhealthyFood = () => {
         return calculateDaysSinceLastOccurrence('diet-unhealthy');
+    };
+    
+    /**
+     * Calculate average work hours per day
+     * @returns {Number} Average work hours per day
+     */
+    const calculateAverageWorkHours = () => {
+        const activities = Storage.getActivities();
+        const workActivities = activities.filter(activity => 
+            activity.actionId === 'work' || activity.type === 'work');
+        
+        if (workActivities.length === 0) return 0;
+        
+        let totalHours = 0;
+        
+        workActivities.forEach(activity => {
+            const startTime = activity.startTime.split(':');
+            const endTime = activity.endTime.split(':');
+            
+            const startDate = new Date(0);
+            startDate.setHours(parseInt(startTime[0]), parseInt(startTime[1]), 0);
+            
+            const endDate = new Date(0);
+            endDate.setHours(parseInt(endTime[0]), parseInt(endTime[1]), 0);
+            
+            // Handle end time being next day
+            if (endDate < startDate) {
+                endDate.setDate(endDate.getDate() + 1);
+            }
+            
+            const diffHours = (endDate - startDate) / (1000 * 60 * 60);
+            totalHours += diffHours;
+        });
+        
+        return (totalHours / workActivities.length).toFixed(1);
     };
     
         /**
      * Count activities by action for the last 30 days
      * @returns {Object} Object with actionId as keys and counts as values
      */
-    const getActivityCountsLast30Days = async () => {
-        const activities = await Storage.getActivities();
+    const getActivityCountsLast30Days = () => {
+        const activities = Storage.getActivities();
         const now = new Date();
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(now.getDate() - 30);
@@ -172,6 +207,7 @@ const Analytics = (() => {
         getBadHabitActions,
         calculateExerciseStreak,
         calculateDaysSinceUnhealthyFood,
+        calculateAverageWorkHours,
         getActivityCountsLast30Days
     };
 })();

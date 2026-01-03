@@ -3,151 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Daily Activity Tracker (Cloud)</title>
+    <title>Daily Activity Tracker</title>
     <link rel="stylesheet" href="css/reset.css">
     <link rel="stylesheet" href="css/styles.css">
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-
-        const firebaseConfig = {
-          apiKey: "AIzaSyDvmw61r3dG-vGzLi4tAQyaeFmVi2P2DQw",
-          authDomain: "acitivity-tracker.firebaseapp.com",
-          projectId: "acitivity-tracker",
-          storageBucket: "acitivity-tracker.firebasestorage.app",
-          messagingSenderId: "222069656558",
-          appId: "1:222069656558:web:8507cf52f6cabe0a4adcff"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-
-        // Exporting to window so Storage.js and App.js can use them
-        window.db = db;
-        window.auth = auth;
-        window.fs = { doc, setDoc, getDoc, updateDoc };
-        window.fbAuth = { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut };
-    </script>
-
     <script src="js/storage.js" defer></script>
     <script src="js/analytics.js" defer></script>
     <script src="js/ui.js" defer></script>
     <script src="js/app.js" defer></script>
 </head>
 <body>
-    <div id="auth-overlay" style="display: flex; position: fixed; inset: 0; background: #f4f7f6; z-index: 2000; align-items: center; justify-content: center; flex-direction: column; text-align: center;">
-        <h1 style="color: #2c3e50; margin-bottom: 1rem;">Daily Activity Tracker</h1>
-        <p style="color: #7f8c8d; margin-bottom: 2rem;">Cloud Sync Enabled</p>
-        <button id="login-btn" class="btn" style="padding: 15px 30px; font-size: 1.1rem;">Sign in with Google</button>
-    </div>
-
     <div class="container">
-        <header style="display: flex; justify-content: space-between; align-items: center;">
+        <header>
             <h1>Daily Activity Tracker</h1>
-            <button id="logout-btn" style="background:none; border:none; color:#e74c3c; cursor:pointer; font-weight:bold;">Logout</button>
         </header>
 
         <main>
+            <!-- Dashboard Section -->
             <section id="dashboard" class="section active">
-                <div id="stats-container" class="stats-grid">
-                    </div>
+                <h2>Dashboard</h2>
+                <div id="stats-container" class="stats-container">
+                    <!-- Stats will be populated dynamically -->
+                </div>
                 <div class="today-activities">
-                    <h2>Today's Activities</h2>
-                    <div id="today-activity-list"></div>
+                    <h3>Today's Activities</h3>
+                    <div id="today-activity-list" class="activity-list">
+                        <!-- Today's activities will be displayed here -->
+                        <p class="empty-state">No activities logged today</p>
+                    </div>
                 </div>
             </section>
-        
+
+            <!-- Activity Entry Section -->
             <section id="activity-entry" class="section">
-                <h2>Log Activity</h2>
+                <h2>Log New Activity</h2>
                 <div class="form-group">
-                    <label for="action-select">What did you do?</label>
-                    <select id="action-select"></select>
-                </div>
-                <div id="dynamic-form-container"></div>
-                <label for="action-notes">Description/Notes</label>
-                <textarea id="action-notes" placeholder="e.g. Daily steps goal or types of unhealthy food"></textarea>
-            </section>
-        
-            <section id="history" class="section">
-                <h2>History</h2>
-                <div class="filter-controls">
-                    <select id="history-filter">
-                        <option value="all">All Activities</option>
+                    <label for="action-select">Select Action</label>
+                    <select id="action-select" required>
+                        <!-- Actions will be populated dynamically -->
                     </select>
-                    <button id="clear-data" class="btn btn-danger">Clear All Data</button>
                 </div>
-                <div id="activity-history-list"></div>
+                
+                <!-- Dynamic Form Container -->
+                <div id="dynamic-form-container">
+                    <!-- Form will be generated dynamically based on selected action -->
+                </div>
             </section>
-        
+
+            <!-- Admin Section -->
             <section id="admin" class="section">
-                <div class="admin-header">
-                    <h2>Manage Actions</h2>
-                    <button id="add-action-btn" class="btn">Add New Action</button>
+                <h2>Manage Actions</h2>
+                
+                <!-- Data Management Section -->
+                <div class="data-management">
+                    <h3>Data Management</h3>
+                    <div class="button-group">
+                        <button id="export-data-btn" class="btn">Export Data</button>
+                        <button id="import-data-btn" class="btn">Import Data</button>
+                        <input type="file" id="import-file-input" accept=".json" style="display: none">
+                    </div>
+                    <div class="import-options hidden" id="import-options">
+                        <p>How do you want to import the data?</p>
+                        <div class="radio-group">
+                            <label>
+                                <input type="radio" name="import-mode" value="merge" checked>
+                                Merge (add to existing data)
+                            </label>
+                            <label>
+                                <input type="radio" name="import-mode" value="replace">
+                                Replace (overwrite existing data)
+                            </label>
+                        </div>
+                        <button id="confirm-import-btn" class="btn">Confirm Import</button>
+                        <button id="cancel-import-btn" class="btn btn-secondary">Cancel</button>
+                    </div>
                 </div>
-        
-                <div id="action-form-container" class="hidden">
+                
+                <!-- Action List -->
+                <div class="action-list-container">
+                    <h3>Your Actions</h3>
+                    <div class="filter-controls">
+                        <select id="action-filter">
+                            <option value="all">All Actions</option>
+                            <option value="good">Good Habits</option>
+                            <option value="bad">Bad Habits</option>
+                            <option value="neutral">Neutral Actions</option>
+                        </select>
+                        <button id="add-action-btn" class="btn">+ Add New Action</button>
+                    </div>
+                    <div id="actions-list" class="action-list">
+                        <!-- Actions will be listed here -->
+                    </div>
+                </div>
+                
+                <!-- Action Form (initially hidden) -->
+                <div id="action-form-container" class="form-container hidden">
                     <h3 id="action-form-title">Add New Action</h3>
                     <form id="action-form">
                         <div class="form-group">
                             <label for="action-name">Action Name</label>
-                            <input type="text" id="action-name" required placeholder="e.g., Gym, Meditation">
+                            <input type="text" id="action-name" required>
                         </div>
                         <div class="form-group">
-                            <label>Type</label>
+                            <label>Action Type</label>
                             <div class="radio-group">
-                                <label><input type="radio" name="action-type" value="good" checked> Good Habit</label>
-                                <label><input type="radio" name="action-type" value="bad"> Bad Habit</label>
-                                <label><input type="radio" name="action-type" value="neutral"> Neutral</label>
+                                <label>
+                                    <input type="radio" name="action-type" value="good" required>
+                                    Good Habit
+                                </label>
+                                <label>
+                                    <input type="radio" name="action-type" value="bad">
+                                    Bad Habit
+                                </label>
+                                <label>
+                                    <input type="radio" name="action-type" value="neutral">
+                                    Neutral Action
+                                </label>
                             </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="action-category">Category (Optional)</label>
+                            <input type="text" id="action-category" placeholder="e.g., Exercise, Diet, Work">
                         </div>
                         <div class="form-group">
                             <label>Fields to Track</label>
                             <div class="checkbox-group">
-                                <label><input type="checkbox" name="action-fields" value="duration"> Duration</label>
-                                <label><input type="checkbox" name="action-fields" value="type"> Sub-type</label>
-                                <label><input type="checkbox" name="action-fields" value="startTime"> Start Time</label>
-                                <label><input type="checkbox" name="action-fields" value="endTime"> End Time</label>
+                                <label>
+                                    <input type="checkbox" name="action-fields" value="duration">
+                                    Duration (minutes)
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="action-fields" value="type">
+                                    Type (e.g., running, yoga)
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="action-fields" value="startTime">
+                                    Start Time
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="action-fields" value="endTime">
+                                    End Time
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="action-fields" value="notes" checked>
+                                    Notes
+                                </label>
                             </div>
                         </div>
-                        <div class="form-actions">
-                            <button type="submit" class="btn">Save Action</button>
+                        <div class="form-buttons">
                             <button type="button" id="cancel-action-btn" class="btn btn-secondary">Cancel</button>
+                            <button type="submit" class="btn">Save Action</button>
                         </div>
                     </form>
                 </div>
-        
-                <div class="admin-controls" style="margin-top: 20px;">
-                    <select id="action-filter">
-                        <option value="all">All Types</option>
-                        <option value="good">Good Habits</option>
-                        <option value="bad">Bad Habits</option>
-                        <option value="neutral">Neutral</option>
+            </section>
+
+            <!-- History Section -->
+            <section id="history" class="section">
+                <h2>Activity History</h2>
+                <div class="filter-controls">
+                    <select id="history-filter">
+                        <option value="all">All Activities</option>
+                        <!-- Action options will be added dynamically -->
                     </select>
+                    <button id="clear-data" class="btn btn-danger">Clear All Data</button>
                 </div>
-                <div id="actions-list"></div>
-        
-                <div class="data-management" style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee;">
-                    <h3>Data Management</h3>
-                    <div class="form-actions">
-                        <button id="export-data-btn" class="btn">Export JSON Backup</button>
-                        <button id="import-data-btn" class="btn">Import JSON Backup</button>
-                        <input type="file" id="import-file-input" class="hidden" accept=".json">
-                    </div>
-                    
-                    <div id="import-options" class="hidden" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                        <p>How would you like to import?</p>
-                        <div class="radio-group">
-                            <label><input type="radio" name="import-mode" value="merge" checked> Merge with existing</label>
-                            <label><input type="radio" name="import-mode" value="replace"> Replace all data</label>
-                        </div>
-                        <div class="form-actions" style="margin-top: 10px;">
-                            <button id="confirm-import-btn" class="btn">Confirm Import</button>
-                            <button id="cancel-import-btn" class="btn btn-secondary">Cancel</button>
-                        </div>
-                    </div>
+                <div id="activity-history-list" class="activity-list">
+                    <!-- Activity history will be displayed here -->
+                    <p class="empty-state">No activities logged yet</p>
                 </div>
             </section>
         </main>
