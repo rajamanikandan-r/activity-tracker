@@ -636,8 +636,12 @@ const UI = (() => {
         const pageActivities = activities.slice(start, start + HISTORY_PAGE_SIZE);
 
         activityHistoryList.innerHTML = '';
-        pageActivities.forEach(activity => {
-            activityHistoryList.appendChild(createActivityElement(activity, true));
+        pageActivities.forEach((activity, pageIndex) => {
+            // Find the previous (older) occurrence of this same action in the full sorted list
+            const globalIndex = start + pageIndex;
+            const prevActivity = activities[globalIndex + 1] || null; // sorted newest-first, so +1 is older
+            const elapsed = prevActivity ? calcElapsed(activity.date, prevActivity.date) : null;
+            activityHistoryList.appendChild(createActivityElement(activity, true, true, elapsed));
         });
 
         // Render pagination controls
@@ -661,7 +665,7 @@ const UI = (() => {
      * @param {Boolean} includeEdit - Whether to include an edit button
      * @returns {HTMLElement} The activity element
      */
-    const createActivityElement = (activity, includeDelete = false, includeEdit = true) => {
+    const createActivityElement = (activity, includeDelete = false, includeEdit = true, elapsed = null) => {
         const activityItem = document.createElement('div');
         activityItem.className = 'activity-item';
         activityItem.dataset.id = activity.id;
@@ -741,7 +745,7 @@ const UI = (() => {
         activityItem.innerHTML = `
             <div>
                 <span class="activity-type ${action.type}">${action.name}</span>
-                ${includeDelete ? `<span class="activity-date">${formatDate(activity.date)}</span>` : ''}
+                ${includeDelete ? `<span class="activity-date">${formatDate(activity.date)}${elapsed ? `<span class="activity-elapsed">+${elapsed}</span>` : ''}</span>` : ''}
             </div>
             <div class="activity-details">${details}</div>
             <div class="activity-controls">
@@ -786,6 +790,23 @@ const UI = (() => {
         const date = new Date(year, month - 1, day); // month is 0-indexed in JS Date
         
         return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    };
+
+    /**
+     * Calculate elapsed time between two date strings (YYYY-MM-DD).
+     * Returns a human-readable string like "3d" or "2w 1d".
+     * @param {String} newerDate - The more recent date string
+     * @param {String} olderDate - The earlier date string
+     * @returns {String} Human-readable elapsed time
+     */
+    const calcElapsed = (newerDate, olderDate) => {
+        const [y1, m1, d1] = newerDate.split('-').map(Number);
+        const [y2, m2, d2] = olderDate.split('-').map(Number);
+        const a = new Date(y1, m1 - 1, d1);
+        const b = new Date(y2, m2 - 1, d2);
+        const diffDays = Math.round((a - b) / (1000 * 60 * 60 * 24));
+        if (diffDays <= 0) return null;
+        return `${diffDays}d`;
     };
     
     /**

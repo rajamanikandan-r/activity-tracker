@@ -188,6 +188,18 @@ main {
     color: #666;
 }
 
+.activity-elapsed {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: #e8f4fd;
+    color: #2980b9;
+    border-radius: 10px;
+    vertical-align: middle;
+}
+
 .empty-state {
     padding: 2rem;
     text-align: center;
