@@ -9,12 +9,9 @@ const UI = (() => {
     const navButtons = document.querySelectorAll('.nav-btn');
     
     // Dashboard elements
-    const statsContainer = document.getElementById('stats-container');
-    const todayActivitiesList = document.getElementById('today-activity-list');
-    
-    // Activity Entry elements
-    const actionSelect = document.getElementById('action-select');
-    const dynamicFormContainer = document.getElementById('dynamic-form-container');
+    const dashboardActionSelect = document.getElementById('dashboard-action-select');
+    const dashboardDynamicForm = document.getElementById('dashboard-dynamic-form');
+    const dashboardStatsTable = document.getElementById('dashboard-stats-table');
     
     // Admin elements
     const actionsListEl = document.getElementById('actions-list');
@@ -36,6 +33,7 @@ const UI = (() => {
     // History elements
     const historyFilter = document.getElementById('history-filter');
     const activityHistoryList = document.getElementById('activity-history-list');
+    const historyPagination = document.getElementById('history-pagination');
     const clearDataButton = document.getElementById('clear-data');
     
     // Current editing action ID
@@ -46,20 +44,18 @@ const UI = (() => {
     
     // Current import data
     let currentImportData = null;
+
+    // History pagination state
+    let historyCurrentPage = 1;
+    const HISTORY_PAGE_SIZE = 10;
     
     /**
      * Initialize the UI
      */
     const init = () => {
-        // Set up event listeners
         setupEventListeners();
-        
-        // Load initial data
         updateDashboard();
-        setupActionSelect();
         renderActionsList();
-        setupHistoryFilter();
-        renderActivityHistory();
     };
     
     /**
@@ -77,8 +73,8 @@ const UI = (() => {
             });
         });
         
-        // Action select
-        actionSelect.addEventListener('change', generateActionForm);
+        // Dashboard action select
+        dashboardActionSelect.addEventListener('change', generateDashboardForm);
         
         // Admin action filter
         actionFilter.addEventListener('change', renderActionsList);
@@ -112,7 +108,10 @@ const UI = (() => {
         });
         
         // History filter
-        historyFilter.addEventListener('change', renderActivityHistory);
+        historyFilter.addEventListener('change', () => {
+            historyCurrentPage = 1;
+            renderActivityHistory();
+        });
         
         // Clear data button
         clearDataButton.addEventListener('click', handleClearData);
@@ -129,341 +128,150 @@ const UI = (() => {
         
         document.getElementById(sectionId).classList.add('active');
         
-        // Update specific sections when shown
         if (sectionId === 'dashboard') {
             updateDashboard();
-        } else if (sectionId === 'activity-entry') {
-            setupActionSelect();
-            generateActionForm();
         } else if (sectionId === 'admin') {
             renderActionsList();
-        } else if (sectionId === 'history') {
-            setupHistoryFilter();
-            renderActivityHistory();
         }
     };
     
-    /**
+/**
      * Update the dashboard with current data
      */
     const updateDashboard = () => {
-        statsContainer.innerHTML = '';
-        
-        // Get actions
-        const goodActions = Analytics.getGoodHabitActions();
-        const badActions = Analytics.getBadHabitActions();
-        
-        // Add stat cards for good habits (streaks)
-        goodActions.forEach(action => {
-            const streak = Analytics.calculateActionStreak(action.id);
-            
-            const statCard = document.createElement('div');
-            statCard.className = 'stat-card good-habit';
-            statCard.innerHTML = `
-                <h3>${action.name} Streak</h3>
-                <div class="stat-value">${streak} day${streak !== 1 ? 's' : ''}</div>
-            `;
-            
-            statsContainer.appendChild(statCard);
-        });
-        
-        // Add stat cards for bad habits (days since)
-        badActions.forEach(action => {
-            const daysSince = Analytics.calculateDaysSinceLastOccurrence(action.id);
-            
-            const statCard = document.createElement('div');
-            statCard.className = 'stat-card bad-habit';
-            statCard.innerHTML = `
-                <h3>Days Since ${action.name}</h3>
-                <div class="stat-value">${daysSince} day${daysSince !== 1 ? 's' : ''}</div>
-            `;
-            
-            statsContainer.appendChild(statCard);
-        });
-        
-        // Add section for activity counts in the last 30 days
-        const activityCounts = Analytics.getActivityCountsLast30Days();
-        const allActions = Storage.getActions();
-        
-        // Create header for this section
-        const countSectionHeader = document.createElement('h3');
-        countSectionHeader.className = 'count-section-header';
-        countSectionHeader.textContent = 'Activity Counts (Last 30 Days)';
-        statsContainer.appendChild(countSectionHeader);
-        
-        // Create container for the count cards
-        const countsContainer = document.createElement('div');
-        countsContainer.className = 'counts-container';
-        
-        // Add count cards for each action
-        allActions.forEach(action => {
-            const count = activityCounts[action.id] || 0;
-            
-            const countCard = document.createElement('div');
-            countCard.className = `count-card ${action.type}-habit`;
-            countCard.innerHTML = `
-                <h4>${action.name}</h4>
-                <div class="count-value">${count} time${count !== 1 ? 's' : ''}</div>
-            `;
-            
-            countsContainer.appendChild(countCard);
-        });
-        
-        // If no actions are found, add a message
-        if (allActions.length === 0) {
-            countsContainer.innerHTML = `
-                <p class="empty-state">No actions configured yet. Go to Admin to add actions.</p>
-            `;
+        // Populate dashboard action select
+        const actions = Storage.getActions();
+        dashboardActionSelect.innerHTML = '';
+        if (actions.length === 0) {
+            dashboardActionSelect.innerHTML = '<option value="">No actions available</option>';
+        } else {
+            actions.forEach(action => {
+                const option = document.createElement('option');
+                option.value = action.id;
+                option.textContent = action.name;
+                dashboardActionSelect.appendChild(option);
+            });
         }
-        
-        statsContainer.appendChild(countsContainer);
-        
-        // If no stat cards were added at all, add a message
-        if (statsContainer.children.length === 0) {
-            statsContainer.innerHTML = `
-                <p class="empty-state">No actions configured yet. Go to Admin to add actions.</p>
+        generateDashboardForm();
+
+        // Populate stats table
+        const tbody = dashboardStatsTable.querySelector('tbody');
+        tbody.innerHTML = '';
+        const counts = Analytics.getActivityCountsLast30Days();
+
+        actions.forEach(action => {
+            const row = document.createElement('tr');
+            const currentStreak = Analytics.calculateActionStreak(action.id);
+            const maxStreak = Analytics.calculateMaxStreak(action.id);
+            const last30 = counts[action.id] || 0;
+            
+            // Add a helpful context label text if it's a bad habit
+            const streakSuffix = action.type === 'bad' ? ' days avoided' : ' days';
+
+            row.innerHTML = `
+                <td>
+                    <strong>${action.name}</strong> 
+                    <span class="action-type ${action.type}" style="font-size:0.75rem; padding: 2px 6px; margin-left: 5px;">
+                        ${action.type === 'good' ? 'Good' : action.type === 'bad' ? 'Bad' : 'Neutral'}
+                    </span>
+                </td>
+                <td>${currentStreak}${streakSuffix}</td>
+                <td>${maxStreak}${streakSuffix}</td>
+                <td>${last30} times</td>
             `;
+            tbody.appendChild(row);
+        });
+
+        if (actions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No actions configured yet.</td></tr>';
         }
-        
-        // Update today's activities
-        renderTodayActivities();
+
+        // Update history
+        setupHistoryFilter();
+        renderActivityHistory();
     };
-    
+
     /**
-     * Render today's activities on the dashboard
+     * Generate the dashboard activity logging form
      */
-    const renderTodayActivities = () => {
-        // Format today's date
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const today = `${year}-${month}-${day}`;
-        
-        const todayActivities = Storage.getActivitiesByDate(today);
-        
-        if (todayActivities.length === 0) {
-            todayActivitiesList.innerHTML = '<p class="empty-state">No activities logged today</p>';
+    const generateDashboardForm = () => {
+        const actionId = dashboardActionSelect.value;
+        if (!actionId) {
+            dashboardDynamicForm.innerHTML = '';
             return;
         }
-        
-        todayActivitiesList.innerHTML = '';
-        
-        // Sort activities by timestamp (newest first)
-        todayActivities
-            .sort((a, b) => b.timestamp - a.timestamp)
-            .forEach(activity => {
-                const activityItem = createActivityElement(activity);
-                todayActivitiesList.appendChild(activityItem);
-            });
+
+        const action = Storage.getActions().find(a => a.id === actionId);
+        if (!action) { dashboardDynamicForm.innerHTML = ''; return; }
+
+        let formHTML = `<form id="dashboard-activity-form"><input type="hidden" id="dash-action-id" value="${action.id}">
+            <div class="form-group"><label for="dash-date">Date</label><input type="date" id="dash-date" required></div>`;
+
+        if (action.fields) {
+            if (action.fields.includes('type')) {
+                formHTML += `<div class="form-group"><label for="dash-type">${action.name} Type</label><input type="text" id="dash-type" required placeholder="e.g., Running, Yoga"></div>`;
+            }
+            if (action.fields.includes('duration')) {
+                formHTML += `<div class="form-group"><label for="dash-duration">Duration (minutes)</label><input type="number" id="dash-duration" required min="1"></div>`;
+            }
+            if (action.fields.includes('startTime')) {
+                formHTML += `<div class="form-group"><label for="dash-start">Start Time</label><input type="time" id="dash-start" required></div>`;
+            }
+            if (action.fields.includes('endTime')) {
+                formHTML += `<div class="form-group"><label for="dash-end">End Time</label><input type="time" id="dash-end" required></div>`;
+            }
+            if (action.fields.includes('notes')) {
+                formHTML += `<div class="form-group"><label for="dash-notes">Notes</label><textarea id="dash-notes" placeholder="Additional notes..."></textarea></div>`;
+            }
+        }
+        if (!action.fields || action.fields.length === 0) {
+            formHTML += `<div class="form-group"><label for="dash-notes">Notes</label><textarea id="dash-notes" placeholder="Additional notes..."></textarea></div>`;
+        }
+
+        formHTML += `<button type="submit" class="btn">Save ${action.name}</button></form>`;
+        dashboardDynamicForm.innerHTML = formHTML;
+
+        // Set today's date
+        const now = new Date();
+        document.getElementById('dash-date').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+        document.getElementById('dashboard-activity-form').addEventListener('submit', handleDashboardActivitySubmit);
+    };
+
+    /**
+     * Handle dashboard activity form submission
+     */
+    const handleDashboardActivitySubmit = (e) => {
+        e.preventDefault();
+        const actionId = document.getElementById('dash-action-id').value;
+        const action = Storage.getActions().find(a => a.id === actionId);
+        const activity = { actionId, date: document.getElementById('dash-date').value };
+
+        if (action.fields) {
+            if (action.fields.includes('type') && document.getElementById('dash-type')) activity.exerciseType = document.getElementById('dash-type').value;
+            if (action.fields.includes('duration') && document.getElementById('dash-duration')) activity.duration = document.getElementById('dash-duration').value;
+            if (action.fields.includes('startTime') && document.getElementById('dash-start')) activity.startTime = document.getElementById('dash-start').value;
+            if (action.fields.includes('endTime') && document.getElementById('dash-end')) activity.endTime = document.getElementById('dash-end').value;
+        }
+        if (document.getElementById('dash-notes')) activity.notes = document.getElementById('dash-notes').value;
+
+        if (currentEditingActivityId) {
+            Storage.updateActivity(currentEditingActivityId, activity);
+            showNotification(`${action.name} updated!`);
+            currentEditingActivityId = null;
+        } else {
+            Storage.addActivity(activity);
+            showNotification(`${action.name} saved!`);
+        }
+        e.target.reset();
+        const now = new Date();
+        document.getElementById('dash-date').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+        updateDashboard();
     };
     
     /**
      * Setup the action select dropdown
      */
-    const setupActionSelect = () => {
-        const actions = Storage.getActions();
-        actionSelect.innerHTML = '';
-        
-        if (actions.length === 0) {
-            actionSelect.innerHTML = '<option value="">No actions available</option>';
-            return;
-        }
-        
-        actions.forEach(action => {
-            const option = document.createElement('option');
-            option.value = action.id;
-            option.textContent = action.name;
-            actionSelect.appendChild(option);
-        });
-    };
-    
-    /**
-     * Generate a form based on the selected action
-     */
-    const generateActionForm = () => {
-        const actionId = actionSelect.value;
-        
-        // Reset currentEditingActivityId when the action changes
-        // This prevents editing one activity and switching to a different action type
-        if (!currentEditingActivityId) {
-            currentEditingActivityId = null;
-        }
-        if (!actionId) {
-            dynamicFormContainer.innerHTML = '<p class="empty-state">Please select an action</p>';
-            return;
-        }
-        
-        const action = Storage.getActions().find(a => a.id === actionId);
-        if (!action) {
-            dynamicFormContainer.innerHTML = '<p class="empty-state">Action not found</p>';
-            return;
-        }
-        
-        let formHTML = `
-            <form id="dynamic-activity-form">
-                <input type="hidden" id="action-id" value="${action.id}">
-        `;
-        
-        // Add date field (always present)
-        formHTML += `
-            <div class="form-group">
-                <label for="activity-date">Date</label>
-                <input type="date" id="activity-date" required>
-            </div>
-        `;
-        
-        // Add fields based on action configuration
-        if (!action.fields || action.fields.length === 0) {
-            // Default to notes only if no fields specified
-            formHTML += `
-                <div class="form-group">
-                    <label for="activity-notes">Notes</label>
-                    <textarea id="activity-notes" placeholder="Additional notes..."></textarea>
-                </div>
-            `;
-        } else {
-            // Add fields from the action configuration
-            if (action.fields.includes('type')) {
-                formHTML += `
-                    <div class="form-group">
-                        <label for="activity-type">${action.name} Type</label>
-                        <input type="text" id="activity-type" required placeholder="e.g., Running, Yoga, Cycling">
-                    </div>
-                `;
-            }
-            
-            if (action.fields.includes('duration')) {
-                formHTML += `
-                    <div class="form-group">
-                        <label for="activity-duration">Duration (minutes)</label>
-                        <input type="number" id="activity-duration" required min="1">
-                    </div>
-                `;
-            }
-            
-            if (action.fields.includes('startTime')) {
-                formHTML += `
-                    <div class="form-group">
-                        <label for="activity-start">Start Time</label>
-                        <input type="time" id="activity-start" required>
-                    </div>
-                `;
-            }
-            
-            if (action.fields.includes('endTime')) {
-                formHTML += `
-                    <div class="form-group">
-                        <label for="activity-end">End Time</label>
-                        <input type="time" id="activity-end" required>
-                    </div>
-                `;
-            }
-            
-            if (action.fields.includes('notes')) {
-                formHTML += `
-                    <div class="form-group">
-                        <label for="activity-notes">Notes</label>
-                        <textarea id="activity-notes" placeholder="Additional notes..."></textarea>
-                    </div>
-                `;
-            }
-        }
-        
-        // Set submit button text based on whether we're editing or adding
-        const submitButtonText = currentEditingActivityId ? `Update ${action.name}` : `Save ${action.name}`;
-        
-        formHTML += `
-            <button type="submit" class="btn">${submitButtonText}</button>
-            </form>
-        `;
-        
-        dynamicFormContainer.innerHTML = formHTML;
-        
-        // Set today's date as the default using local timezone
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        document.getElementById('activity-date').value = `${year}-${month}-${day}`;
-        
-        // Add submit event listener to the form
-        document.getElementById('dynamic-activity-form').addEventListener('submit', handleActivitySubmit);
-    };
-    
-    /**
-     * Handle activity form submission
-     * @param {Event} e - Submit event
-     */
-    const handleActivitySubmit = (e) => {
-        e.preventDefault();
-        
-        const actionId = document.getElementById('action-id').value;
-        const date = document.getElementById('activity-date').value;
-        
-        // Create base activity object
-        const activity = {
-            actionId,
-            date
-        };
-        
-        // Get action to determine what fields to collect
-        const action = Storage.getActions().find(a => a.id === actionId);
-        
-        // Collect data based on available fields
-        if (action.fields) {
-            if (action.fields.includes('type') && document.getElementById('activity-type')) {
-                activity.exerciseType = document.getElementById('activity-type').value;
-            }
-            
-            if (action.fields.includes('duration') && document.getElementById('activity-duration')) {
-                activity.duration = document.getElementById('activity-duration').value;
-            }
-            
-            if (action.fields.includes('startTime') && document.getElementById('activity-start')) {
-                activity.startTime = document.getElementById('activity-start').value;
-            }
-            
-            if (action.fields.includes('endTime') && document.getElementById('activity-end')) {
-                activity.endTime = document.getElementById('activity-end').value;
-            }
-        }
-        
-        // Add notes if the field exists
-        if (document.getElementById('activity-notes')) {
-            activity.notes = document.getElementById('activity-notes').value;
-        }
-        
-        // Check if we're editing or adding a new activity
-        if (currentEditingActivityId) {
-            // Update existing activity
-            Storage.updateActivity(currentEditingActivityId, activity);
-            showNotification(`${action.name} updated!`);
-            // Reset the editing ID
-            currentEditingActivityId = null;
-        } else {
-            // Save new activity
-            Storage.addActivity(activity);
-            showNotification(`${action.name} saved!`);
-        }
-        
-        // Reset form
-        e.target.reset();
-        
-        // Set today's date again after form reset with proper local timezone
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        document.getElementById('activity-date').value = `${year}-${month}-${day}`;
-        
-        // Update UI
-        updateDashboard();
-        
-        // Update UI
-        updateDashboard();
-    };
-    
     /**
      * Handle exporting data
      */
@@ -570,9 +378,7 @@ const UI = (() => {
             // Update UI
             updateDashboard();
             renderActionsList();
-            setupActionSelect();
-            setupHistoryFilter();
-            renderActivityHistory();
+            updateDashboard();
         } else {
             showNotification('Failed to import data. Invalid data structure.');
         }
@@ -755,9 +561,7 @@ const UI = (() => {
         renderActionsList();
         
         // Update other parts of the UI that depend on actions
-        setupActionSelect();
         updateDashboard();
-        setupHistoryFilter();
     };
     
     /**
@@ -775,9 +579,7 @@ const UI = (() => {
             if (deleted) {
                 showNotification('Action deleted!');
                 renderActionsList();
-                setupActionSelect();
                 updateDashboard();
-                setupHistoryFilter();
             } else {
                 alert('Cannot delete this action because it has associated activities. Delete the activities first.');
             }
@@ -816,25 +618,40 @@ const UI = (() => {
         
         if (activities.length === 0) {
             activityHistoryList.innerHTML = '<p class="empty-state">No activities found</p>';
+            historyPagination.innerHTML = '';
             return;
         }
         
-        activityHistoryList.innerHTML = '';
-        
         // Sort activities by date (newest first) then by timestamp (newest first)
-        activities
-            .sort((a, b) => {
-                // Sort by date
-                const dateA = a.date;
-                const dateB = b.date;
-                const dateComparison = new Date(dateB) - new Date(dateA);
-                if (dateComparison !== 0) return dateComparison;
-                return b.timestamp - a.timestamp;
-            })
-            .forEach(activity => {
-                const activityItem = createActivityElement(activity, true);
-                activityHistoryList.appendChild(activityItem);
-            });
+        activities.sort((a, b) => {
+            const dateComparison = new Date(b.date) - new Date(a.date);
+            if (dateComparison !== 0) return dateComparison;
+            return b.timestamp - a.timestamp;
+        });
+
+        // Pagination
+        const totalPages = Math.ceil(activities.length / HISTORY_PAGE_SIZE);
+        if (historyCurrentPage > totalPages) historyCurrentPage = totalPages;
+        const start = (historyCurrentPage - 1) * HISTORY_PAGE_SIZE;
+        const pageActivities = activities.slice(start, start + HISTORY_PAGE_SIZE);
+
+        activityHistoryList.innerHTML = '';
+        pageActivities.forEach(activity => {
+            activityHistoryList.appendChild(createActivityElement(activity, true));
+        });
+
+        // Render pagination controls
+        if (totalPages <= 1) {
+            historyPagination.innerHTML = '';
+        } else {
+            historyPagination.innerHTML = `
+                <button class="btn btn-small btn-secondary" id="hist-prev" ${historyCurrentPage === 1 ? 'disabled' : ''}>← Prev</button>
+                <span style="margin: 0 1rem;">Page ${historyCurrentPage} of ${totalPages}</span>
+                <button class="btn btn-small btn-secondary" id="hist-next" ${historyCurrentPage === totalPages ? 'disabled' : ''}>Next →</button>
+            `;
+            document.getElementById('hist-prev').addEventListener('click', () => { historyCurrentPage--; renderActivityHistory(); });
+            document.getElementById('hist-next').addEventListener('click', () => { historyCurrentPage++; renderActivityHistory(); });
+        }
     };
     
     /**
@@ -991,53 +808,37 @@ const UI = (() => {
         const activity = Storage.getActivities().find(a => a.id === activityId);
         if (!activity) return;
         
-        // Find the action associated with this activity
         const action = Storage.getActions().find(a => a.id === activity.actionId);
         if (!action) return;
         
-        // Set current editing activity ID
         currentEditingActivityId = activityId;
         
-        // Show the activity entry section
-        showSection('activity-entry');
-        
-        // Select the correct action
-        actionSelect.value = activity.actionId;
-        
-        // Generate the form
-        generateActionForm();
+        // Select the correct action in dashboard form
+        dashboardActionSelect.value = activity.actionId;
+        generateDashboardForm();
         
         // Fill form fields with activity data
-        document.getElementById('activity-date').value = activity.date;
+        document.getElementById('dash-date').value = activity.date;
         
         if (action.fields) {
-            if (action.fields.includes('type') && document.getElementById('activity-type')) {
-                document.getElementById('activity-type').value = activity.exerciseType || '';
-            }
-            
-            if (action.fields.includes('duration') && document.getElementById('activity-duration')) {
-                document.getElementById('activity-duration').value = activity.duration || '';
-            }
-            
-            if (action.fields.includes('startTime') && document.getElementById('activity-start')) {
-                document.getElementById('activity-start').value = activity.startTime || '';
-            }
-            
-            if (action.fields.includes('endTime') && document.getElementById('activity-end')) {
-                document.getElementById('activity-end').value = activity.endTime || '';
-            }
+            if (action.fields.includes('type') && document.getElementById('dash-type'))
+                document.getElementById('dash-type').value = activity.exerciseType || '';
+            if (action.fields.includes('duration') && document.getElementById('dash-duration'))
+                document.getElementById('dash-duration').value = activity.duration || '';
+            if (action.fields.includes('startTime') && document.getElementById('dash-start'))
+                document.getElementById('dash-start').value = activity.startTime || '';
+            if (action.fields.includes('endTime') && document.getElementById('dash-end'))
+                document.getElementById('dash-end').value = activity.endTime || '';
         }
+        if (document.getElementById('dash-notes'))
+            document.getElementById('dash-notes').value = activity.notes || '';
+
+        // Update submit button text
+        const submitBtn = document.querySelector('#dashboard-activity-form button[type="submit"]');
+        if (submitBtn) submitBtn.textContent = `Update ${action.name}`;
         
-        // Add notes if the field exists
-        if (document.getElementById('activity-notes')) {
-            document.getElementById('activity-notes').value = activity.notes || '';
-        }
-        
-        // Update the submit button text
-        const submitBtn = document.querySelector('#dynamic-activity-form button[type="submit"]');
-        if (submitBtn) {
-            submitBtn.textContent = `Update ${action.name}`;
-        }
+        // Scroll to top of form
+        document.getElementById('dashboard-form-container').scrollIntoView({ behavior: 'smooth' });
     };
     
     /**

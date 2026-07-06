@@ -5,12 +5,20 @@
 
 const Analytics = (() => {
     /**
-     * Calculate the current streak for a good habit action
-     * A streak is consecutive days with the action performed
+     * Calculate the current streak for an action
+     * For good/neutral habits: consecutive days with the action performed
+     * For bad habits: consecutive days since the last occurrence (days avoided)
      * @param {String} actionId - ID of the action to calculate streak for
-     * @returns {Number} Number of consecutive days with the action
+     * @returns {Number} Streak count or days avoided
      */
     const calculateActionStreak = (actionId) => {
+        const action = Storage.getActions().find(a => a.id === actionId);
+        
+        // If it's a bad habit, the "current streak" is the days avoided since it last occurred
+        if (action && action.type === 'bad') {
+            return calculateDaysSinceLastOccurrence(actionId);
+        }
+
         const activities = Storage.getActivities();
         if (activities.length === 0) return 0;
         
@@ -199,9 +207,66 @@ const Analytics = (() => {
         return counts;
     };
     
+    /**
+     * Calculate the maximum streak ever achieved for an action
+     * For good habits: longest run of consecutive days WITH the activity
+     * For bad habits: longest gap (days WITHOUT the activity) between occurrences
+     * @param {String} actionId - ID of the action
+     * @returns {Number} Maximum streak
+     */
+    const calculateMaxStreak = (actionId) => {
+        const activities = Storage.getActivities();
+        const action = Storage.getActions().find(a => a.id === actionId);
+        const actionDates = [...new Set(
+            activities
+                .filter(a => a.actionId === actionId)
+                .filter(a => a.date)
+                .map(a => a.date)
+        )].sort();
+
+        if (actionDates.length === 0) return 0;
+
+        const toLocal = (dateStr) => {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            return new Date(y, m - 1, d);
+        };
+
+        const dayDiff = (a, b) => Math.round((b - a) / (1000 * 60 * 60 * 24));
+
+        if (action && action.type === 'bad') {
+            // Max streak = longest gap between consecutive occurrences
+            let maxGap = 0;
+            for (let i = 1; i < actionDates.length; i++) {
+                const gap = dayDiff(toLocal(actionDates[i - 1]), toLocal(actionDates[i])) - 1;
+                if (gap > maxGap) maxGap = gap;
+            }
+            // Also consider gap from last occurrence to today
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const lastGap = dayDiff(toLocal(actionDates[actionDates.length - 1]), today);
+            if (lastGap > maxGap) maxGap = lastGap;
+            return maxGap;
+        }
+
+        // Good/neutral: longest run of consecutive days with the activity
+        let maxStreak = 1;
+        let current = 1;
+        for (let i = 1; i < actionDates.length; i++) {
+            const diff = dayDiff(toLocal(actionDates[i - 1]), toLocal(actionDates[i]));
+            if (diff === 1) {
+                current++;
+                if (current > maxStreak) maxStreak = current;
+            } else {
+                current = 1;
+            }
+        }
+        return maxStreak;
+    };
+
     // Public API
     return {
         calculateActionStreak,
+        calculateMaxStreak,
         calculateDaysSinceLastOccurrence,
         getGoodHabitActions,
         getBadHabitActions,
