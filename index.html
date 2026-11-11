@@ -12,11 +12,12 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
     <!-- App config & modules (order matters: config → storage → analytics → ui → app) -->
-    <script src="js/firebase-config.js" defer></script>
-    <script src="js/storage.js" defer></script>
-    <script src="js/analytics.js" defer></script>
-    <script src="js/ui.js" defer></script>
-    <script src="js/app.js" defer></script>
+    <!-- ?v=2 busts the cache so phones/browsers pick up the latest files -->
+    <script src="js/firebase-config.js?v=2" defer></script>
+    <script src="js/storage.js?v=2" defer></script>
+    <script src="js/analytics.js?v=2" defer></script>
+    <script src="js/ui.js?v=2" defer></script>
+    <script src="js/app.js?v=2" defer></script>
 </head>
 <body>
     <div class="container">
