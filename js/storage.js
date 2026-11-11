@@ -1,294 +1,337 @@
 /**
  * Storage handling module for Daily Activity Tracker
- * Manages all interactions with localStorage
+ * Manages all interactions with Cloud Firestore
  */
 
 const Storage = (() => {
-    // Storage keys
-    const ACTIVITIES_STORAGE_KEY = 'dailyActivityTracker.activities';
-    const ACTIONS_STORAGE_KEY = 'dailyActivityTracker.actions';
-    
+    // Firestore collection names
+    const ACTIVITIES_COLLECTION = 'activities';
+    const ACTIONS_COLLECTION = 'actions';
+
+    // Firestore DB reference — set by initStorage() after Firebase is initialised
+    let db = null;
+
     /**
-     * Save activities to localStorage
-     * @param {Array} activities - Array of activity objects
+     * Initialise Firestore. Must be called once before any other method.
+     * @param {firebase.firestore.Firestore} firestoreInstance
      */
-    const saveActivities = (activities) => {
-        localStorage.setItem(ACTIVITIES_STORAGE_KEY, JSON.stringify(activities));
+    const initStorage = (firestoreInstance) => {
+        db = firestoreInstance;
     };
-    
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+
     /**
-     * Get all activities from localStorage
-     * @returns {Array} Array of activity objects
+     * Convert a Firestore QuerySnapshot / DocumentSnapshot to a plain array/object.
      */
-    const getActivities = () => {
-        const storedData = localStorage.getItem(ACTIVITIES_STORAGE_KEY);
-        return storedData ? JSON.parse(storedData) : [];
-    };
-    
+    const docToObj = (doc) => ({ id: doc.id, ...doc.data() });
+
+    // ─── Activities ───────────────────────────────────────────────────────────
+
     /**
-     * Add a new activity
-     * @param {Object} activity - Activity object to add
+     * Get all activities from Firestore, sorted newest-first by timestamp.
+     * @returns {Promise<Array>}
      */
-    const addActivity = (activity) => {
-        const activities = getActivities();
-        
-        // Generate a unique ID for the activity
-        activity.id = Date.now().toString();
-        
-        // Store timestamp information for sorting
-        activity.timestamp = Date.now();
-        
-        activities.push(activity);
-        saveActivities(activities);
-        return activity;
-    };
-    
-    /**
-     * Delete an activity by ID
-     * @param {String} id - ID of the activity to delete
-     */
-    const deleteActivity = (id) => {
-        const activities = getActivities();
-        const updatedActivities = activities.filter(activity => activity.id !== id);
-        saveActivities(updatedActivities);
-    };
-    
-    /**
-     * Update an existing activity
-     * @param {String} id - ID of the activity to update
-     * @param {Object} updatedActivity - Updated activity object
-     * @returns {Object|null} Updated activity or null if not found
-     */
-    const updateActivity = (id, updatedActivity) => {
-        const activities = getActivities();
-        const index = activities.findIndex(activity => activity.id === id);
-        
-        if (index !== -1) {
-            // Preserve original timestamp and ID
-            const originalActivity = activities[index];
-            const mergedActivity = { 
-                ...originalActivity,
-                ...updatedActivity,
-                id: originalActivity.id, // ensure ID doesn't change
-                timestamp: originalActivity.timestamp // keep original timestamp for sorting
-            };
-            
-            activities[index] = mergedActivity;
-            saveActivities(activities);
-            return mergedActivity;
-        }
-        
-        return null;
-    };
-    
-    /**
-     * Get activities by date
-     * @param {String} dateStr - Date string in format YYYY-MM-DD
-     * @returns {Array} Array of activities for the specified date
-     */
-    const getActivitiesByDate = (dateStr) => {
-        const activities = getActivities();
-        return activities.filter(activity => activity.date === dateStr);
-    };
-    
-    /**
-     * Get activities by local date (for backward compatibility)
-     * @param {String} dateStr - Date string in format YYYY-MM-DD
-     * @returns {Array} Array of activities for the specified date
-     */
-    const getActivitiesByLocalDate = (dateStr) => {
-        return getActivitiesByDate(dateStr);
-    };
-    
-    /**
-     * Get activities by action ID
-     * @param {String} actionId - ID of the action
-     * @returns {Array} Array of activities for the specified action
-     */
-    const getActivitiesByActionId = (actionId) => {
-        const activities = getActivities();
-        return activities.filter(activity => activity.actionId === actionId);
-    };
-    
-    /**
-     * Get activities by action type (for backward compatibility)
-     * @param {String} type - Type of activity ('exercise', 'diet', 'work')
-     * @returns {Array} Array of activities of the specified type
-     */
-    const getActivitiesByType = (type) => {
-        const activities = getActivities();
-        return activities.filter(activity => activity.type === type);
-    };
-    
-    /**
-     * Clear all stored activities
-     */
-    const clearAllData = () => {
-        localStorage.removeItem(ACTIVITIES_STORAGE_KEY);
+    const getActivities = async () => {
+        const snapshot = await db.collection(ACTIVITIES_COLLECTION)
+            .orderBy('timestamp', 'desc')
+            .get();
+        return snapshot.docs.map(docToObj);
     };
 
     /**
-     * Save actions to localStorage
-     * @param {Array} actions - Array of action objects
+     * Add a new activity to Firestore.
+     * @param {Object} activity
+     * @returns {Promise<Object>} The saved activity with its Firestore id.
      */
-    const saveActions = (actions) => {
-        localStorage.setItem(ACTIONS_STORAGE_KEY, JSON.stringify(actions));
+    const addActivity = async (activity) => {
+        activity.timestamp = Date.now();
+        const docRef = await db.collection(ACTIVITIES_COLLECTION).add(activity);
+        activity.id = docRef.id;
+        return activity;
     };
-    
+
     /**
-     * Get all actions from localStorage
-     * @returns {Array} Array of action objects
+     * Delete an activity by ID.
+     * @param {String} id
+     * @returns {Promise<void>}
      */
-    const getActions = () => {
-        // Check if there are existing actions
-        const storedData = localStorage.getItem(ACTIONS_STORAGE_KEY);
-        
-        // If there are actions, return them
-        if (storedData) {
-            return JSON.parse(storedData);
+    const deleteActivity = async (id) => {
+        await db.collection(ACTIVITIES_COLLECTION).doc(id).delete();
+    };
+
+    /**
+     * Update an existing activity.
+     * @param {String} id
+     * @param {Object} updatedActivity
+     * @returns {Promise<Object|null>}
+     */
+    const updateActivity = async (id, updatedActivity) => {
+        const docRef = db.collection(ACTIVITIES_COLLECTION).doc(id);
+        const snap = await docRef.get();
+        if (!snap.exists) return null;
+
+        const original = { id: snap.id, ...snap.data() };
+        const merged = {
+            ...original,
+            ...updatedActivity,
+            id: original.id,
+            timestamp: original.timestamp // keep original timestamp
+        };
+        // Write merged fields (excluding the id which is the document key)
+        const { id: _id, ...dataToWrite } = merged;
+        await docRef.set(dataToWrite);
+        return merged;
+    };
+
+    /**
+     * Get activities for a specific date.
+     * @param {String} dateStr - YYYY-MM-DD
+     * @returns {Promise<Array>}
+     */
+    const getActivitiesByDate = async (dateStr) => {
+        const snapshot = await db.collection(ACTIVITIES_COLLECTION)
+            .where('date', '==', dateStr)
+            .get();
+        return snapshot.docs.map(docToObj);
+    };
+
+    /** Alias for getActivitiesByDate */
+    const getActivitiesByLocalDate = getActivitiesByDate;
+
+    /**
+     * Get activities for a specific action.
+     * @param {String} actionId
+     * @returns {Promise<Array>}
+     */
+    const getActivitiesByActionId = async (actionId) => {
+        const snapshot = await db.collection(ACTIVITIES_COLLECTION)
+            .where('actionId', '==', actionId)
+            .get();
+        return snapshot.docs.map(docToObj);
+    };
+
+    /**
+     * Get activities by legacy type field.
+     * @param {String} type
+     * @returns {Promise<Array>}
+     */
+    const getActivitiesByType = async (type) => {
+        const snapshot = await db.collection(ACTIVITIES_COLLECTION)
+            .where('type', '==', type)
+            .get();
+        return snapshot.docs.map(docToObj);
+    };
+
+    /**
+     * Delete all activities (clear data).
+     * Uses batched writes in chunks of 500 (Firestore batch limit).
+     * @returns {Promise<void>}
+     */
+    const clearAllData = async () => {
+        const snapshot = await db.collection(ACTIVITIES_COLLECTION).get();
+        const docs = snapshot.docs;
+        // Process in batches of 500
+        for (let i = 0; i < docs.length; i += 500) {
+            const batch = db.batch();
+            docs.slice(i, i + 500).forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
         }
-        
-        // Otherwise, create default actions
-        const defaultActions = [
-            {
-                id: 'exercise',
-                name: 'Exercise',
-                type: 'good',
-                category: 'Physical',
-                fields: ['exerciseType', 'duration', 'notes']
-            },
-            {
-                id: 'diet-healthy',
-                name: 'Healthy Food',
-                type: 'good',
-                category: 'Nutrition',
-                fields: ['notes']
-            },
-            {
-                id: 'diet-unhealthy',
-                name: 'Unhealthy Food',
-                type: 'bad',
-                category: 'Nutrition',
-                fields: ['notes']
-            },
-            {
-                id: 'work',
-                name: 'Work Time',
-                type: 'neutral',
-                category: 'Work',
-                fields: ['startTime', 'endTime']
-            }
-        ];
-        
-        saveActions(defaultActions);
-        return defaultActions;
     };
-    
+
+    // ─── Actions ──────────────────────────────────────────────────────────────
+
+    const DEFAULT_ACTIONS = [
+        {
+            id: 'exercise',
+            name: 'Exercise',
+            type: 'good',
+            category: 'Physical',
+            fields: ['exerciseType', 'duration', 'notes']
+        },
+        {
+            id: 'diet-healthy',
+            name: 'Healthy Food',
+            type: 'good',
+            category: 'Nutrition',
+            fields: ['notes']
+        },
+        {
+            id: 'diet-unhealthy',
+            name: 'Unhealthy Food',
+            type: 'bad',
+            category: 'Nutrition',
+            fields: ['notes']
+        },
+        {
+            id: 'work',
+            name: 'Work Time',
+            type: 'neutral',
+            category: 'Work',
+            fields: ['startTime', 'endTime']
+        }
+    ];
+
     /**
-     * Add a new action
-     * @param {Object} action - Action object to add
+     * Get all actions. Seeds defaults on first run (if the collection is empty).
+     * @returns {Promise<Array>}
      */
-    const addAction = (action) => {
-        const actions = getActions();
-        
-        // Generate a unique ID for the action if not provided
+    const getActions = async () => {
+        const snapshot = await db.collection(ACTIONS_COLLECTION).get();
+
+        // Seed defaults if no actions exist yet
+        if (snapshot.empty) {
+            const batch = db.batch();
+            DEFAULT_ACTIONS.forEach(action => {
+                const ref = db.collection(ACTIONS_COLLECTION).doc(action.id);
+                batch.set(ref, action);
+            });
+            await batch.commit();
+            return DEFAULT_ACTIONS;
+        }
+
+        return snapshot.docs.map(docToObj);
+    };
+
+    /**
+     * Add a new action.
+     * @param {Object} action
+     * @returns {Promise<Object>}
+     */
+    const addAction = async (action) => {
         if (!action.id) {
             action.id = 'action-' + Date.now().toString();
         }
-        
-        actions.push(action);
-        saveActions(actions);
+        await db.collection(ACTIONS_COLLECTION).doc(action.id).set(action);
         return action;
-    };
-    
-    /**
-     * Update an existing action
-     * @param {String} id - ID of the action to update
-     * @param {Object} updatedAction - Updated action object
-     */
-    const updateAction = (id, updatedAction) => {
-        const actions = getActions();
-        const index = actions.findIndex(action => action.id === id);
-        
-        if (index !== -1) {
-            actions[index] = { ...actions[index], ...updatedAction };
-            saveActions(actions);
-            return actions[index];
-        }
-        
-        return null;
-    };
-    
-    /**
-     * Delete an action by ID
-     * @param {String} id - ID of the action to delete
-     * @returns {Boolean} True if action was deleted, false if it has associated activities
-     */
-    const deleteAction = (id) => {
-        // Check if there are activities using this action
-        const activities = getActivities();
-        const hasActivities = activities.some(activity => 
-            activity.actionId === id || activity.type === id);
-        
-        // Don't delete if there are associated activities
-        if (hasActivities) {
-            return false;
-        }
-        
-        const actions = getActions();
-        const updatedActions = actions.filter(action => action.id !== id);
-        saveActions(updatedActions);
-        return true;
     };
 
     /**
-     * Export all data to a JSON object
-     * @returns {Object} JSON object with all data
+     * Update an existing action.
+     * @param {String} id
+     * @param {Object} updatedAction
+     * @returns {Promise<Object|null>}
      */
-    const exportData = () => {
+    const updateAction = async (id, updatedAction) => {
+        const docRef = db.collection(ACTIONS_COLLECTION).doc(id);
+        const snap = await docRef.get();
+        if (!snap.exists) return null;
+
+        const merged = { ...snap.data(), ...updatedAction };
+        await docRef.set(merged);
+        return { id, ...merged };
+    };
+
+    /**
+     * Delete an action by ID. Returns false if activities reference it.
+     * @param {String} id
+     * @returns {Promise<Boolean>}
+     */
+    const deleteAction = async (id) => {
+        // Check for associated activities
+        const snap = await db.collection(ACTIVITIES_COLLECTION)
+            .where('actionId', '==', id)
+            .limit(1)
+            .get();
+
+        if (!snap.empty) return false;
+
+        await db.collection(ACTIONS_COLLECTION).doc(id).delete();
+        return true;
+    };
+
+    // ─── Import / Export ──────────────────────────────────────────────────────
+
+    /**
+     * Export all data as a plain JS object.
+     * @returns {Promise<Object>}
+     */
+    const exportData = async () => {
+        const [activities, actions] = await Promise.all([getActivities(), getActions()]);
         return {
-            activities: getActivities(),
-            actions: getActions(),
+            activities,
+            actions,
             version: '1.0',
             exportDate: new Date().toISOString()
         };
     };
-    
+
     /**
-     * Import data from a JSON object
-     * @param {Object} data - JSON object with data to import
-     * @param {Boolean} replace - If true, replace existing data; if false, merge with existing data
-     * @returns {Boolean} True if import was successful, false otherwise
+     * Import data from a JSON object.
+     * @param {Object} data
+     * @param {Boolean} replace - Replace all existing data if true, otherwise merge.
+     * @returns {Promise<Boolean>}
      */
-    const importData = (data, replace) => {
-        // Validate data structure
-        if (!data || !data.activities || !data.actions) {
-            return false;
-        }
-        
+    const importData = async (data, replace) => {
+        if (!data || !data.activities || !data.actions) return false;
+
         try {
             if (replace) {
-                // Replace all data
-                saveActivities(data.activities);
-                saveActions(data.actions);
+                // Delete all existing actions and activities first
+                await Promise.all([clearAllData(), (async () => {
+                    const snap = await db.collection(ACTIONS_COLLECTION).get();
+                    for (let i = 0; i < snap.docs.length; i += 500) {
+                        const batch = db.batch();
+                        snap.docs.slice(i, i + 500).forEach(doc => batch.delete(doc.ref));
+                        await batch.commit();
+                    }
+                })()]);
+
+                // Batch-write new actions
+                for (let i = 0; i < data.actions.length; i += 500) {
+                    const batch = db.batch();
+                    data.actions.slice(i, i + 500).forEach(action => {
+                        const { id, ...rest } = action;
+                        batch.set(db.collection(ACTIONS_COLLECTION).doc(id || 'action-' + Date.now()), { id: id || 'action-' + Date.now(), ...rest });
+                    });
+                    await batch.commit();
+                }
+
+                // Batch-write new activities
+                for (let i = 0; i < data.activities.length; i += 500) {
+                    const batch = db.batch();
+                    data.activities.slice(i, i + 500).forEach(activity => {
+                        const { id, ...rest } = activity;
+                        const ref = id
+                            ? db.collection(ACTIVITIES_COLLECTION).doc(id)
+                            : db.collection(ACTIVITIES_COLLECTION).doc();
+                        batch.set(ref, rest);
+                    });
+                    await batch.commit();
+                }
             } else {
-                // Merge data
-                const existingActivities = getActivities();
-                const existingActions = getActions();
-                
-                // Create lookup for existing activities to avoid duplicates
-                const existingActivityIds = existingActivities.map(a => a.id);
-                const newActivities = data.activities.filter(a => !existingActivityIds.includes(a.id));
-                
-                // Create lookup for existing actions to avoid duplicates
-                const existingActionIds = existingActions.map(a => a.id);
-                const newActions = data.actions.filter(a => !existingActionIds.includes(a.id));
-                
-                // Add new activities and actions
-                saveActivities([...existingActivities, ...newActivities]);
-                saveActions([...existingActions, ...newActions]);
+                // Merge: only add items whose IDs don't already exist
+                const [existingActivities, existingActions] = await Promise.all([
+                    getActivities(), getActions()
+                ]);
+                const existingActivityIds = new Set(existingActivities.map(a => a.id));
+                const existingActionIds = new Set(existingActions.map(a => a.id));
+
+                const newActivities = data.activities.filter(a => !existingActivityIds.has(a.id));
+                const newActions = data.actions.filter(a => !existingActionIds.has(a.id));
+
+                for (let i = 0; i < newActions.length; i += 500) {
+                    const batch = db.batch();
+                    newActions.slice(i, i + 500).forEach(action => {
+                        const { id, ...rest } = action;
+                        batch.set(db.collection(ACTIONS_COLLECTION).doc(id), { id, ...rest });
+                    });
+                    await batch.commit();
+                }
+
+                for (let i = 0; i < newActivities.length; i += 500) {
+                    const batch = db.batch();
+                    newActivities.slice(i, i + 500).forEach(activity => {
+                        const { id, ...rest } = activity;
+                        const ref = id
+                            ? db.collection(ACTIVITIES_COLLECTION).doc(id)
+                            : db.collection(ACTIVITIES_COLLECTION).doc();
+                        batch.set(ref, rest);
+                    });
+                    await batch.commit();
+                }
             }
-            
+
             return true;
         } catch (error) {
             console.error('Error importing data:', error);
@@ -296,48 +339,50 @@ const Storage = (() => {
         }
     };
 
+    // ─── Migration ────────────────────────────────────────────────────────────
+
     /**
-     * Migrate old data to new format
-     * This function converts legacy activities to the new format with actionId
+     * Migrate legacy activities (type-based) to actionId-based format.
+     * Reads all activities and rewrites any that lack an actionId.
+     * Safe to call multiple times — only touches documents that need migration.
+     * @returns {Promise<void>}
      */
-    const migrateData = () => {
-        const activities = getActivities();
-        let migrated = false;
-        
-        const updatedActivities = activities.map(activity => {
-            // Skip already migrated activities
-            if (activity.actionId) return activity;
-            
-            const newActivity = { ...activity };
-            migrated = true;
-            
-            // Convert old type-based activities to action-based
-            switch(activity.type) {
-                case 'exercise':
-                    newActivity.actionId = 'exercise';
-                    break;
-                case 'diet':
-                    newActivity.actionId = activity.foodQuality === 'healthy' ? 
-                        'diet-healthy' : 'diet-unhealthy';
-                    break;
-                case 'work':
-                    newActivity.actionId = 'work';
-                    break;
+    const migrateData = async () => {
+        const snapshot = await db.collection(ACTIVITIES_COLLECTION).get();
+        const batch = db.batch();
+        let needsMigration = false;
+
+        snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            if (!data.actionId && data.type) {
+                needsMigration = true;
+                let actionId;
+                switch (data.type) {
+                    case 'exercise':
+                        actionId = 'exercise';
+                        break;
+                    case 'diet':
+                        actionId = data.foodQuality === 'healthy' ? 'diet-healthy' : 'diet-unhealthy';
+                        break;
+                    case 'work':
+                        actionId = 'work';
+                        break;
+                    default:
+                        actionId = data.type;
+                }
+                batch.update(doc.ref, { actionId });
             }
-            
-            return newActivity;
         });
-        
-        if (migrated) {
-            saveActivities(updatedActivities);
+
+        if (needsMigration) {
+            await batch.commit();
         }
     };
-    
-    // Call migration when the module is loaded
-    migrateData();
-    
+
     // Public API
     return {
+        initStorage,
+
         // Activities
         addActivity,
         getActivities,
@@ -348,17 +393,17 @@ const Storage = (() => {
         deleteActivity,
         updateActivity,
         clearAllData,
-        
+
         // Actions
         getActions,
         addAction,
         updateAction,
         deleteAction,
-        
+
         // Import/Export
         exportData,
         importData,
-        
+
         // Migration
         migrateData
     };
