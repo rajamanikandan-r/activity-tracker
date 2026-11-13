@@ -208,9 +208,7 @@ const UI = (() => {
             if (action.fields.includes('type')) {
                 formHTML += `<div class="form-group"><label for="dash-type">${action.name} Type</label><input type="text" id="dash-type" required placeholder="e.g., Running, Yoga"></div>`;
             }
-            if (action.fields.includes('duration')) {
-                formHTML += `<div class="form-group"><label for="dash-duration">Duration (minutes)</label><input type="number" id="dash-duration" required min="1"></div>`;
-            }
+
             if (action.fields.includes('startTime')) {
                 formHTML += `<div class="form-group"><label for="dash-start">Start Time</label><input type="time" id="dash-start" required></div>`;
             }
@@ -250,8 +248,6 @@ const UI = (() => {
         if (action.fields) {
             if (action.fields.includes('type') && document.getElementById('dash-type'))
                 activity.exerciseType = document.getElementById('dash-type').value;
-            if (action.fields.includes('duration') && document.getElementById('dash-duration'))
-                activity.duration = document.getElementById('dash-duration').value;
             if (action.fields.includes('startTime') && document.getElementById('dash-start'))
                 activity.startTime = document.getElementById('dash-start').value;
             if (action.fields.includes('endTime') && document.getElementById('dash-end'))
@@ -668,8 +664,6 @@ const UI = (() => {
         if (action.fields) {
             if (action.fields.includes('type') && document.getElementById('dash-type'))
                 document.getElementById('dash-type').value = activity.exerciseType || '';
-            if (action.fields.includes('duration') && document.getElementById('dash-duration'))
-                document.getElementById('dash-duration').value = activity.duration || '';
             if (action.fields.includes('startTime') && document.getElementById('dash-start'))
                 document.getElementById('dash-start').value = activity.startTime || '';
             if (action.fields.includes('endTime') && document.getElementById('dash-end'))
